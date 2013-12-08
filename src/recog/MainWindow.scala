@@ -37,7 +37,7 @@ object MainWindow extends SimpleSwingApplication {
       icon = new javax.swing.ImageIcon(s)
     }
   }
-  def loadExample(fileName:String) = {
+  def loadExample(fileName: String) = {
     val imageStream = getClass.getResourceAsStream(fileName)
     ImageIO.read(imageStream)
   }
@@ -89,7 +89,7 @@ object MainWindow extends SimpleSwingApplication {
 
 class MainWindow extends MainFrame {
   import MainWindow._
-  val updateReaction:Reactions.Reaction = {
+  val updateReaction: Reactions.Reaction = {
     case e: SelectionChanged => updateImage
     case e: ValueChanged => updateImage
     case e: ButtonClicked => updateImage
@@ -99,35 +99,43 @@ class MainWindow extends MainFrame {
   val imageLabel = new Label() { icon = imageIcon }
   val drawOriginalCheck = new CheckBox
   val sourceCombo = new ComboBox(Seq("Example.png", "ExampleGreen.png"))
-  sourceCombo.selection.reactions += updateReaction 
-  val resultsToDraw:collection.mutable.Set[ImageProcessor[_,_]] = collection.mutable.Set()
+  sourceCombo.selection.reactions += updateReaction
+  val resultsToDraw: collection.mutable.Set[ImageProcessor[_, _]] = collection.mutable.Set()
   drawOriginalCheck.text = "Draw original"
   drawOriginalCheck.reactions += updateReaction
-  val processors = Seq(new CannyProcessor, new LineFinder)
+
+  val canny = new CannyProcessor
+  val hough = new LineFinder
+
+  val composed = new ComposedProcessor(hough, canny)
+
+  val processors = Seq(canny, hough)
+  contents = new BoxPanel(Orientation.Vertical) {
+    contents += imageLabel
+    for (processor <- processors) {
+      contents += new ProcPanel(processor)
+    }
+    contents += drawOriginalCheck
+    contents += sourceCombo
+
+  }
+
   def updateImage {
     val orig: Mat = loadExample(sourceCombo.selection.item)
     var mat: Mat = new Mat(orig, Range.all())
-    var image: Mat = if (drawOriginalCheck.selected) {orig.clone() } else Mat.zeros(orig.size(), CvType.CV_8UC3)
-    for (proc <- processors) {
-      mat = proc(mat)
-      if (resultsToDraw contains proc)
-    	  proc.draw(image, mat)
+    var image: Mat = if (drawOriginalCheck.selected) { orig.clone() } else Mat.zeros(orig.size(), CvType.CV_8UC3)
+    composed.applyWithHook(mat) { (a: ImageProcessor[_, _], b: Any) =>
+      {
+        if (resultsToDraw contains a)
+          a.draw(image, b.asInstanceOf[a.Result])
+      }
     }
     imageIcon.setImage(image)
     imageLabel.repaint()
   }
   updateImage
-  contents = new BoxPanel(Orientation.Vertical) {
-    contents += imageLabel
-    for (processor <- processors) {
-      contents+= new ProcPanel(processor)
-    }
-    contents+= drawOriginalCheck 
-    contents+= sourceCombo 
-    
-  }
   class ProcPanel[T, V](val processor: ImageProcessor[T, V]) extends BoxPanel(Orientation.Horizontal) {
-    contents += new Label {text = processor.name+": "}
+    contents += new Label { text = processor.name + ": " }
     for (parameter <- processor.parameters) {
       val paramComp = new DoubleParameterComponent(parameter)
       paramComp.reactions += updateReaction
@@ -136,14 +144,16 @@ class MainWindow extends MainFrame {
     val drawResultCheck = new CheckBox
     drawResultCheck.text = "Draw result: "
     drawResultCheck.reactions += {
-      case _ =>
-      if (drawResultCheck.selected) {
-       resultsToDraw += processor
-      } else {
-        resultsToDraw -= processor
+      case e: ButtonClicked => {
+        val changed = if (drawResultCheck.selected) {
+          resultsToDraw.add(processor)
+        } else {
+          resultsToDraw.remove(processor)
+        }
+        if (changed)
+        	updateReaction(e)
       }
     }
-    drawResultCheck.reactions += updateReaction
     contents += drawResultCheck
     def isChecked = drawResultCheck.selected
   }

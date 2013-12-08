@@ -29,10 +29,12 @@ class LineFinder extends ImageProcessor[Mat, Mat] {
   def parameters(): Seq[DoubleParameter] = Seq(rho, theta, threshold, minLength, maxGap)
   def apply(mat: Mat): Mat = {
     val lines = new Mat
+    assert(lines.`type`() == CvType.CV_8U)
     Imgproc.HoughLinesP(mat, lines, rho.value , theta.value, threshold.value.toInt, minLength.value*mat.width(), maxGap.value * mat.width)
     lines
   }
-  def draw(target:Mat, lines:Mat){
+  def draw(target:Mat, result:Any){
+    val lines = result.asInstanceOf[Mat]
     for (i <- 0 until lines.cols()) {
       val line = lines.get(0, i)
       Core.line(target, new Point(line(0), line(1)), new Point(line(2), line(3)), new Scalar(0,255,0), 1)
