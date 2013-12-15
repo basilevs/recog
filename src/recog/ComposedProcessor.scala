@@ -30,12 +30,27 @@ object ComposedProcessor {
       case _ => None
     }
   }
+  
+  def safeCast[T](clazz:Class[T], input:Any): Option[T] = {
+    if (clazz.isInstance(input))
+      Some(input.asInstanceOf[T])
+    else
+      None
+  }
+  def universalApply[T, R](processor: ImageProcessor[T, R], input:T, hook: (ImageProcessor[_, _], Any) => Unit): R = {
+    val composed = safeCast(classOf[ComposedProcessor[T, _, R]], processor)
+    if (composed.isDefined) {
+      composed.get.applyWithHook(input)(hook)
+    } else {
+      processor.apply(input)
+    }
+  }
 
 }
 
 class ComposedProcessor[-T, M, R] (val second:ImageProcessor[M, R], val first:ImageProcessor[T, M])
 extends ImageProcessor[T, R] {
-
+	import ComposedProcessor._
   def name(): String = second.name + " o " + first.name
 
   def parameters = second.parameters ++ first.parameters
@@ -49,9 +64,9 @@ extends ImageProcessor[T, R] {
   }
   
   def applyWithHook[X](input:T)(hook: (ImageProcessor[_, _], Any) => Unit):R = {
-    val intermediateResult = first.apply(input)    
+    val intermediateResult = universalApply(first, input, hook)
     hook(first, intermediateResult)
-    val rv = second.apply(intermediateResult)
+    val rv = universalApply(second, intermediateResult, hook)
     hook(second, rv)
     rv
   }

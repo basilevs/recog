@@ -28,6 +28,7 @@ import scala.swing.event.SelectionChanged
 import scala.swing.event.ButtonClicked
 import scala.swing.Panel
 import scala.swing.ComboBox
+import scala.language.implicitConversions 
 
 object MainWindow extends SimpleSwingApplication {
   System.loadLibrary(Core.NATIVE_LIBRARY_NAME);
@@ -105,11 +106,12 @@ class MainWindow extends MainFrame {
   drawOriginalCheck.reactions += updateReaction
 
   val canny = new CannyProcessor
-  val hough = new LineFinder
+  val hough = new HoughProcessor
+  val grid = new GridProcessor 
 
-  val composed = new ComposedProcessor(hough, canny)
+  val composed = new ComposedProcessor(hough, canny) + grid
 
-  val processors = Seq(canny, hough)
+  val processors = Seq(canny, hough, grid)
   contents = new BoxPanel(Orientation.Vertical) {
     contents += imageLabel
     for (processor <- processors) {
@@ -124,14 +126,18 @@ class MainWindow extends MainFrame {
     val orig: Mat = loadExample(sourceCombo.selection.item)
     var mat: Mat = new Mat(orig, Range.all())
     var image: Mat = if (drawOriginalCheck.selected) { orig.clone() } else Mat.zeros(orig.size(), CvType.CV_8UC3)
-    composed.applyWithHook(mat) { (a: ImageProcessor[_, _], b: Any) =>
-      {
-        if (resultsToDraw contains a)
-          a.draw(image, b.asInstanceOf[a.Result])
-      }
+    try {
+	    composed.applyWithHook(mat) { (a: ImageProcessor[_, _], b: Any) =>
+	      {
+	        if (resultsToDraw contains a)
+	          a.draw(image, b.asInstanceOf[a.Result])
+	      }
+	    }
+    } finally {
+	    imageIcon.setImage(image)
+	    imageLabel.repaint()
+	    MainWindow.this.pack()
     }
-    imageIcon.setImage(image)
-    imageLabel.repaint()
   }
   updateImage
   class ProcPanel[T, V](val processor: ImageProcessor[T, V]) extends BoxPanel(Orientation.Horizontal) {
